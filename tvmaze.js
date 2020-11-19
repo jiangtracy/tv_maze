@@ -1,9 +1,12 @@
 "use strict";
 
+const SHOW_URL = "http://api.tvmaze.com";
+const MISSING_IMG_URL = "https://tinyurl.com/tv-missing";
+
 const $showsList = $("#showsList");
 const $episodesArea = $("#episodesArea");
 const $searchForm = $("#searchForm");
-
+const $episodesList = $("#episodesList");
 
 /** Given a search term, search for tv shows that match that query.
  *
@@ -14,43 +17,19 @@ const $searchForm = $("#searchForm");
 
 async function getShowsByTerm(term) {
   // ADD: Remove placeholder & make request to TVMaze search shows API.
-  const showURL = "http://api.tvmaze.com/search/shows";
-  let response = await axios.get(showURL,{params: {q : term}});
-  let shows = [];
-  
-  
-  console.log(response.data);
+  let response = await axios.get(`${SHOW_URL}/search/shows`, { params: { q: term } });
+  let showData = response.data;
 
-  for(let show of response.data){
-    let showData = show.show;
-    let id = showData.id;
-    let name = showData.name;
-    let image = showData.image.medium;
-    let summary = showData.summary;
-    shows.push({id, name, image, summary});
-  }
+  return showData.map(function (show) {
+    let showObj = show.show;
 
-  console.log(showObjectArray);
-  return showObjectArray;
+    let id = showObj.id;
+    let name = showObj.name;
+    let image = (showObj.image) ? showObj.image.medium : MISSING_IMG_URL;
+    let summary = showObj.summary;
 
-  // [
-  //   {
-  //     id: 1767,
-  //     name: "The Bletchley Circle",
-  //     summary:
-  //       `<p><b>The Bletchley Circle</b> follows the journey of four ordinary 
-  //          women with extraordinary skills that helped to end World War II.</p>
-  //        <p>Set in 1952, Susan, Millie, Lucy and Jean have returned to their 
-  //          normal lives, modestly setting aside the part they played in 
-  //          producing crucial intelligence, which helped the Allies to victory 
-  //          and shortened the war. When Susan discovers a hidden code behind an
-  //          unsolved murder she is met by skepticism from the police. She 
-  //          quickly realises she can only begin to crack the murders and bring
-  //          the culprit to justice with her former friends.</p>`,
-  //     image:
-  //         "http://static.tvmaze.com/uploads/images/medium_portrait/147/369403.jpg"
-  //   }
-  // ]
+    return { id, name, image, summary };
+  });
 }
 
 
@@ -61,11 +40,11 @@ function populateShows(shows) {
 
   for (let show of shows) {
     const $show = $(
-        `<div data-show-id="${show.id}" class="Show col-md-12 col-lg-6 mb-4">
+      `<div data-show-id="${show.id}" class="Show col-md-12 col-lg-6 mb-4">
          <div class="media">
            <img 
-              src="http://static.tvmaze.com/uploads/images/medium_portrait/160/401704.jpg" 
-              alt="Bletchly Circle San Francisco" 
+              src=${show.image} 
+              alt="${show.name}" 
               class="w-25 mr-3">
            <div class="media-body">
              <h5 class="text-primary">${show.name}</h5>
@@ -78,7 +57,8 @@ function populateShows(shows) {
        </div>
       `);
 
-    $showsList.append($show);  }
+    $showsList.append($show);
+  }
 }
 
 
@@ -91,21 +71,67 @@ async function searchForShowAndDisplay() {
   const shows = await getShowsByTerm(term);
 
   $episodesArea.hide();
-  // populateShows(shows);
+  populateShows(shows);
 }
-
-$searchForm.on("submit", async function (evt) {
-  evt.preventDefault();
-  await searchForShowAndDisplay();
-});
 
 
 /** Given a show ID, get from API and return (promise) array of episodes:
  *      { id, name, season, number }
  */
+async function getEpisodesOfShow(id) {
+  let response = await axios.get(`${SHOW_URL}/shows/${id}/episodes`);
+  let episodeData = response.data;
 
-// async function getEpisodesOfShow(id) { }
+  return episodeData.map(function(episode) {
+    let id = episode.id;
+    let name = episode.name;
+    let season = episode.season;
+    let number = episode.number;
 
-/** Write a clear docstring for this function... */
+    return {id, name, season, number};
+  });
+}
 
-// function populateEpisodes(episodes) { }
+/*
+ *Adds a list of the episodes list DOM 
+*/
+function populateEpisodes(episodes) {
+  $episodesList.empty();
+  $episodesArea.attr("style", "");
+
+  for (let episode of episodes) {
+    const $episode = $(
+      `<li>${episode.name} (Season ${episode.season}, number ${episode.number})</li>`);
+
+    $episodesList.append($episode);
+  }
+}
+
+/**Returns the ID of the show */
+function getShowId(evt) {
+  let showId = $(evt.target)
+    .closest(".Show")
+    .attr("data-show-id");
+  
+  return showId;
+}
+
+/**Gets the episodes of the show ID and displays the list of episodes in the DOM */
+async function getEpisodesAndDisplay(evt) {
+  let id = getShowId(evt);
+  let episodes = await getEpisodesOfShow(id);
+  populateEpisodes(episodes);  
+}
+
+
+/**Adds event listener to the submit button */
+$searchForm.on("submit", async function (evt) {
+  evt.preventDefault();
+  await searchForShowAndDisplay();
+});
+
+/**Adds event listener to the Episodes buttons */
+$showsList.on("click", ".Show-getEpisodes", async function(evt) {
+  evt.preventDefault();
+  await getEpisodesAndDisplay(evt);
+});
